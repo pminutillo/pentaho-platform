@@ -24,10 +24,17 @@ import org.junit.Test;
 import org.pentaho.platform.api.repository2.unified.IRepositoryFileData;
 import org.pentaho.platform.api.repository2.unified.RepositoryFile;
 import org.pentaho.platform.api.repository2.unified.RepositoryFileAcl;
+import org.pentaho.platform.api.repository2.unified.RepositoryRequest;
+import org.pentaho.platform.api.repository2.unified.data.simple.SimpleRepositoryFileData;
+import org.pentaho.platform.repository2.unified.jcr.JcrRepositoryFileDao;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 
+import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,7 +43,7 @@ public class DefaultUnifiedRepositoryMocksTest {
 
   private DefaultUnifiedRepository defaultUnifiedRepository;
 
-  private IRepositoryFileDao mockRepositoryFileDao;
+  private JcrRepositoryFileDao mockRepositoryFileDao;
 
   private IRepositoryFileAclDao mockRepositoryFileAclDao;
 
@@ -63,6 +70,7 @@ public class DefaultUnifiedRepositoryMocksTest {
   
   
   private static final String VERSION_MESSAGE = "";
+  private static final String FILE_FILTER = "*|*";
 
   RepositoryFile repositoryFile1;
   RepositoryFile repositoryFolder1;
@@ -83,7 +91,7 @@ public class DefaultUnifiedRepositoryMocksTest {
 
     repositoryFileAcl = mock(RepositoryFileAcl.class);
 
-    mockRepositoryFileDao = mock(IRepositoryFileDao.class);
+    mockRepositoryFileDao = mock(JcrRepositoryFileDao.class);
     when(mockRepositoryFileDao.canUnlockFile(TEST_FILE_1_FILENAME)).thenReturn(true);
     when(mockRepositoryFileDao.canUnlockFile(TEST_FILE_2_FILENAME)).thenReturn(false);
     when(mockRepositoryFileDao.createFile(TEST_FILE_1_ID, repositoryFile1, mockRepositoryFile1Data, null, VERSION_MESSAGE)).thenReturn(repositoryFile1);
@@ -194,12 +202,14 @@ public class DefaultUnifiedRepositoryMocksTest {
 
   @Test
   public void testGetDataForExecute() throws Exception {
-
+    defaultUnifiedRepository.getDataForExecute(TEST_FILE_1_ID, SimpleRepositoryFileData.class);
+    verify(mockRepositoryFileDao.getData(TEST_FILE_1_ID, null, SimpleRepositoryFileData.class));
   }
 
   @Test
   public void testGetDataAtVersionForExecute() throws Exception {
-
+    IRepositoryFileData filedata = defaultUnifiedRepository.getDataAtVersionForExecute(TEST_FILE_1_ID, TEST_FILE_1_VERSION_ID, SimpleRepositoryFileData.class);
+    verify(mockRepositoryFileDao).getData(TEST_FILE_1_ID, TEST_FILE_1_VERSION_ID, SimpleRepositoryFileData.class);
   }
 
   @Test
@@ -209,7 +219,8 @@ public class DefaultUnifiedRepositoryMocksTest {
 
   @Test
   public void testGetDataAtVersionForRead() throws Exception {
-
+    IRepositoryFileData filedata = defaultUnifiedRepository.getDataAtVersionForExecute(TEST_FILE_1_ID, TEST_FILE_1_VERSION_ID, SimpleRepositoryFileData.class);
+    verify(mockRepositoryFileDao).getData(TEST_FILE_1_ID, TEST_FILE_1_VERSION_ID, SimpleRepositoryFileData.class);
   }
 
   @Test
@@ -219,27 +230,35 @@ public class DefaultUnifiedRepositoryMocksTest {
 
   @Test
   public void testGetDataForExecuteInBatch() throws Exception {
-
+    List<RepositoryFile> files = new ArrayList();
+    files.add(repositoryFile1);
+    List<SimpleRepositoryFileData> data = defaultUnifiedRepository.getDataForExecuteInBatch(files, SimpleRepositoryFileData.class);
+    verify(mockRepositoryFileDao).getData(TEST_FILE_1_ID, TEST_FILE_1_VERSION_ID, SimpleRepositoryFileData.class);
   }
 
   @Test
-  public void testGetChildren() throws Exception {
-
+  public void testGetChildrenWithRepositoryRequest() throws Exception {
+    RepositoryRequest request = new RepositoryRequest(TEST_FILE_1_PATH, Boolean.TRUE, 1, "");
+    List<RepositoryFile> children = defaultUnifiedRepository.getChildren(request);
+    verify(mockRepositoryFileDao).getChildren(request);
   }
 
   @Test
-  public void testGetChildren2() throws Exception {
-
+  public void testGetChildrenWithFolderId() throws Exception {
+    List<RepositoryFile> children = defaultUnifiedRepository.getChildren(TEST_FOLDER_1_ID);
+    verify(mockRepositoryFileDao).getChildren(TEST_FOLDER_1_ID, null, null);
   }
 
   @Test
-  public void testGetChildren3() throws Exception {
-
+  public void testGetChildrenWithFilter() throws Exception {
+    List<RepositoryFile> children = defaultUnifiedRepository.getChildren(TEST_FOLDER_1_ID, FILE_FILTER, Boolean.TRUE);
+    verify(mockRepositoryFileDao).getChildren(any(RepositoryRequest.class));
   }
 
   @Test
-  public void testGetChildren4() throws Exception {
-
+  public void testGetChildrenWithFilterAndHidden() throws Exception {
+    List<RepositoryFile> children = defaultUnifiedRepository.getChildren(TEST_FOLDER_1_ID, FILE_FILTER, true);
+    verify(mockRepositoryFileDao).getChildren(any(RepositoryRequest.class));
   }
 
   @Test
@@ -261,7 +280,8 @@ public class DefaultUnifiedRepositoryMocksTest {
 
   @Test
   public void testDeleteFileAtVersion() throws Exception {
-    mockRepositoryFileDao.deleteFileAtVersion(TEST_FILE_1_ID, TEST_FILE_1_VERSION_ID);
+    defaultUnifiedRepository.deleteFileAtVersion(TEST_FILE_1_ID, TEST_FILE_1_VERSION_ID);
+    verify(mockRepositoryFileDao).deleteFileAtVersion(TEST_FILE_1_ID, TEST_FILE_1_VERSION_ID);
   }
 
   @Test
@@ -345,13 +365,13 @@ public class DefaultUnifiedRepositoryMocksTest {
   @Test
   public void testCanUnlockFile() throws Exception {
     assert(defaultUnifiedRepository.canUnlockFile(TEST_FILE_1_FILENAME) == true);
-    verify(mockRepositoryFileDao.canUnlockFile(TEST_FILE_1_FILENAME));
+    verify(mockRepositoryFileDao).canUnlockFile(TEST_FILE_1_FILENAME);
   }
 
   @Test
   public void testCanUnlockFileFalse() throws Exception {
     assert(defaultUnifiedRepository.canUnlockFile(TEST_FILE_2_FILENAME) == false);
-    verify(mockRepositoryFileDao.canUnlockFile(TEST_FILE_2_FILENAME));
+    verify(mockRepositoryFileDao).canUnlockFile(TEST_FILE_2_FILENAME);
   }
 
   @Test
@@ -386,17 +406,21 @@ public class DefaultUnifiedRepositoryMocksTest {
 
   @Test
   public void testGetAvailableLocalesForFileById() throws Exception {
-
+    List<Locale> localeList = defaultUnifiedRepository.getAvailableLocalesForFileById(TEST_FILE_1_ID);
+    verify(mockRepositoryFileDao).getAvailableLocalesForFileById(TEST_FILE_1_ID);
   }
 
   @Test
   public void testGetAvailableLocalesForFileByPath() throws Exception {
+    List<Locale> localeList = defaultUnifiedRepository.getAvailableLocalesForFileByPath(TEST_FILE_1_PATH);
+    verify(mockRepositoryFileDao).getAvailableLocalesForFileByPath(TEST_FILE_1_PATH);
 
   }
 
   @Test
   public void testGetAvailableLocalesForFile() throws Exception {
-
+    List<Locale> localeList = defaultUnifiedRepository.getAvailableLocalesForFile(repositoryFile1);
+    verify(mockRepositoryFileDao).getAvailableLocalesForFile(repositoryFile1);
   }
 
   @Test
