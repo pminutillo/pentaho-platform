@@ -30,7 +30,7 @@ import org.pentaho.mantle.client.events.EventBusUtil;
 import org.pentaho.mantle.client.events.SolutionFileActionEvent;
 import org.pentaho.mantle.client.events.SolutionFileHandler;
 import org.pentaho.mantle.client.solutionbrowser.SolutionBrowserPanel;
-import org.pentaho.mantle.client.solutionbrowser.fileproperties.FileHistoryDialog;
+import org.pentaho.mantle.client.solutionbrowser.filehistory.FileHistoryDialog;
 
 public class FileHistoryCommand implements Command {
 

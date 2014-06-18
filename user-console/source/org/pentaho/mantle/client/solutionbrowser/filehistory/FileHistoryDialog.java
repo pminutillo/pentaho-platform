@@ -15,7 +15,7 @@
  * Copyright (c) 2002-2013 Pentaho Corporation..  All rights reserved.
  */
 
-package org.pentaho.mantle.client.solutionbrowser.fileproperties;
+package org.pentaho.mantle.client.solutionbrowser.filehistory;
 
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.http.client.Request;
@@ -26,7 +26,6 @@ import com.google.gwt.http.client.Response;
 import com.google.gwt.json.client.JSONObject;
 import com.google.gwt.json.client.JSONString;
 import com.google.gwt.user.client.ui.Widget;
-
 import org.pentaho.gwt.widgets.client.dialogs.IDialogCallback;
 import org.pentaho.gwt.widgets.client.dialogs.MessageDialogBox;
 import org.pentaho.gwt.widgets.client.dialogs.PromptDialogBox;
@@ -38,6 +37,8 @@ import org.pentaho.mantle.client.events.EventBusUtil;
 import org.pentaho.mantle.client.events.GenericEvent;
 import org.pentaho.mantle.client.messages.Messages;
 import org.pentaho.mantle.client.solutionbrowser.SolutionBrowserPanel;
+import org.pentaho.mantle.client.solutionbrowser.filehistory.GeneralFileHistoryPanel;
+import org.pentaho.mantle.client.solutionbrowser.fileproperties.IFileModifier;
 import org.pentaho.mantle.client.ui.PerspectiveManager;
 
 import java.util.ArrayList;
@@ -52,8 +53,7 @@ public class FileHistoryDialog extends PromptDialogBox {
   }
 
   private PentahoTabPanel propertyTabs;
-  private GeneralFilePanel generalTab;
-  private PermissionsPanel permissionsTab;
+  private GeneralFileHistoryPanel generalTab;
 
   private String moduleBaseURL = GWT.getModuleBaseURL();
   private String moduleName = GWT.getModuleName();
@@ -74,27 +74,18 @@ public class FileHistoryDialog extends PromptDialogBox {
   public FileHistoryDialog(RepositoryFile fileSummary, final PentahoTabPanel propertyTabs,
                            final IDialogCallback callback, Tabs defaultTab, final boolean canManageAcls) {
     super(
-        fileSummary.getTitle() + " " + Messages.getString( "properties" ), Messages.getString( "ok" ), Messages.getString( "cancel" ), false, true ); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-    boolean isInTrash = fileSummary.getPath().contains( "/.trash/pho:" );
+        fileSummary.getTitle() + " " + Messages.getString( "versionHistoryDialogTitle" ), Messages.getString( "ok" ), Messages.getString( "cancel" ), false, true ); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
     setContent( propertyTabs );
     this.canManageAcls = canManageAcls;
-    generalTab = new GeneralFilePanel( this, fileSummary );
+    generalTab = new org.pentaho.mantle.client.solutionbrowser.filehistory.GeneralFileHistoryPanel( this, fileSummary );
 
-    if ( canManageAcls && !isInTrash ) {
-      permissionsTab = new PermissionsPanel( fileSummary );
-    }
+    generalTab.getElement().setId( "fileHistoryGeneralTab" );
 
-    generalTab.getElement().setId( "filePropertiesGeneralTab" );
-    if ( canManageAcls && !isInTrash ) {
-      permissionsTab.getElement().setId( "filePropertiesPermissionsTab" );
-    }
+    // get versions via REST
+    getFileHistory( fileSummary );
 
-    // get metadata via REST
-    getMetadata( fileSummary );
-    getAcls( fileSummary );
-
-    okButton.getElement().setId( "filePropertiesOKButton" );
-    cancelButton.getElement().setId( "filePropertiesCancelButton" );
+    okButton.getElement().setId( "fileHistoryOKButton" );
+    cancelButton.getElement().setId( "fileHistoryCancelButton" );
 
     if (fileSummary.isFolder()) {
       parentPath = fileSummary.getPath();
@@ -102,8 +93,6 @@ public class FileHistoryDialog extends PromptDialogBox {
       parentPath = fileSummary.getPath().substring( 0, fileSummary.getPath().lastIndexOf( "/" ) );
       fileName = fileSummary.getName();
     }
-
-
 
     super.setCallback( new IDialogCallback() {
 
@@ -122,9 +111,7 @@ public class FileHistoryDialog extends PromptDialogBox {
     } );
     this.propertyTabs = propertyTabs;
     this.propertyTabs.addTab( Messages.getString( "general" ), Messages.getString( "general" ), false, generalTab );
-    if ( canManageAcls && permissionsTab != null ) {
-      this.propertyTabs.addTab( Messages.getString( "share" ), Messages.getString( "share" ), false, permissionsTab );
-    }
+
     getWidget().setHeight( "100%" ); //$NON-NLS-1$
     getWidget().setWidth( "100%" ); //$NON-NLS-1$
     setPixelSize( 490, 420 );
@@ -138,7 +125,7 @@ public class FileHistoryDialog extends PromptDialogBox {
     ArrayList<RequestBuilder> requestBuilders = new ArrayList<RequestBuilder>();
     for ( int i = 0; i < propertyTabs.getTabCount(); i++ ) {
       Widget w = propertyTabs.getTab( i ).getContent();
-      if ( w instanceof IFileModifier ) {
+      if ( w instanceof IFileModifier) {
         // get requests from sub panels
         if ( ( (IFileModifier) w ).prepareRequests() != null ) {
           requestBuilders.addAll( ( (IFileModifier) w ).prepareRequests() );
@@ -224,11 +211,6 @@ public class FileHistoryDialog extends PromptDialogBox {
             propertyTabs.selectTab( pTab );
           }
           break;
-        case PERMISSION:
-          if ( canManageAcls && pTab.getContent() == permissionsTab ) {
-            propertyTabs.selectTab( pTab );
-          }
-          break;
         default:
           break;
       }
@@ -237,83 +219,38 @@ public class FileHistoryDialog extends PromptDialogBox {
 
   /**
    *
-   * @param fileSummary
+   * @param repositoryFile
    */
-  protected void getAcls( RepositoryFile fileSummary ) {
-    String url = contextURL + "api/repo/files/" + SolutionBrowserPanel.pathToId( fileSummary.getPath() ) + "/acl"; //$NON-NLS-1$ //$NON-NLS-2$
-    RequestBuilder builder = new RequestBuilder( RequestBuilder.GET, url );
-    // This header is required to force Internet Explorer to not cache values from the GET response.
-    builder.setHeader( "If-Modified-Since", "01 Jan 1970 00:00:00 GMT" );
-    try {
-      builder.sendRequest( null, new RequestCallback() {
+  protected void getFileHistory( RepositoryFile repositoryFile ){
+      String url = contextURL + "api/repo/files/" + SolutionBrowserPanel.pathToId( repositoryFile.getPath() ) + "/versions"; //$NON-NLS-1$ //$NON-NLS-2$
+      RequestBuilder builder = new RequestBuilder( RequestBuilder.GET, url );
+      // This header is required to force Internet Explorer to not cache values from the GET response.
+      builder.setHeader( "If-Modified-Since", "01 Jan 1970 00:00:00 GMT" );
+      try {
+          builder.sendRequest( null, new RequestCallback() {
 
-        public void onError( Request request, Throwable exception ) {
+              public void onError( Request request, Throwable exception ) {
+                  MessageDialogBox dialogBox =
+                          new MessageDialogBox( Messages.getString( "error" ), exception.getLocalizedMessage(), false, false, true ); //$NON-NLS-1$
+                  dialogBox.center();
+              }
+
+              public void onResponseReceived( Request request, Response response ) {
+                  if ( response.getStatusCode() == Response.SC_OK ) {
+                      generalTab.setVersionsResponse(response);
+                  } else {
+                      MessageDialogBox dialogBox =
+                              new MessageDialogBox(
+                                      Messages.getString( "error" ), Messages.getString( "serverErrorColon" ) + " " + response.getStatusCode(), false, false, true ); //$NON-NLS-1$//$NON-NLS-2$//$NON-NLS-3$
+                      dialogBox.center();
+                  }
+              }
+          } );
+      } catch ( RequestException e ) {
           MessageDialogBox dialogBox =
-              new MessageDialogBox( Messages.getString( "error" ), exception.getLocalizedMessage(), false, false, true ); //$NON-NLS-1$
+                  new MessageDialogBox( Messages.getString( "error" ), e.getLocalizedMessage(), false, false, true ); //$NON-NLS-1$
           dialogBox.center();
-        }
-
-        public void onResponseReceived( Request request, Response response ) {
-          if ( response.getStatusCode() == Response.SC_OK ) {
-            generalTab.setAclResponse( response );
-            if ( permissionsTab != null ) {
-              permissionsTab.setAclResponse( response );
-            }
-          } else {
-            MessageDialogBox dialogBox =
-                new MessageDialogBox(
-                    Messages.getString( "error" ), Messages.getString( "serverErrorColon" ) + " " + response.getStatusCode(), false, false, true ); //$NON-NLS-1$//$NON-NLS-2$//$NON-NLS-3$
-            dialogBox.center();
-          }
-        }
-      } );
-    } catch ( RequestException e ) {
-      MessageDialogBox dialogBox =
-          new MessageDialogBox( Messages.getString( "error" ), e.getLocalizedMessage(), false, false, true ); //$NON-NLS-1$
-      dialogBox.center();
-    }
-  }
-
-  /**
-   *
-   * @param fileSummary
-   */
-  protected void getMetadata( RepositoryFile fileSummary ) {
-    String metadataUrl =
-        contextURL
-            + "api/repo/files/" + SolutionBrowserPanel.pathToId( fileSummary.getPath() ) + "/metadata?cb=" + System.currentTimeMillis(); //$NON-NLS-1$ //$NON-NLS-2$
-    RequestBuilder metadataBuilder = new RequestBuilder( RequestBuilder.GET, metadataUrl );
-    // This header is required to force Internet Explorer to not cache values from the GET response.
-    metadataBuilder.setHeader( "If-Modified-Since", "01 Jan 1970 00:00:00 GMT" );
-    metadataBuilder.setHeader( "accept", "application/json" );
-    try {
-      metadataBuilder.sendRequest( null, new RequestCallback() {
-
-        public void onError( Request request, Throwable exception ) {
-          MessageDialogBox dialogBox =
-              new MessageDialogBox( Messages.getString( "error" ), exception.getLocalizedMessage(), false, false, true ); //$NON-NLS-1$
-          dialogBox.center();
-        }
-
-        public void onResponseReceived( Request request, Response response ) {
-          if ( response.getStatusCode() == Response.SC_OK ) {
-            if ( response.getText() != null && !"".equals( response.getText() )
-              && !response.getText().equals( "null" ) ) {
-              generalTab.setMetadataResponse( response );
-            }
-          } else {
-            MessageDialogBox dialogBox =
-                new MessageDialogBox(
-                    Messages.getString( "error" ), Messages.getString( "serverErrorColon" ) + " " + response.getStatusCode(), false, false, true ); //$NON-NLS-1$//$NON-NLS-2$//$NON-NLS-3$
-            dialogBox.center();
-          }
-        }
-      } );
-    } catch ( RequestException e ) {
-      MessageDialogBox dialogBox =
-          new MessageDialogBox( Messages.getString( "error" ), e.getLocalizedMessage(), false, false, true ); //$NON-NLS-1$
-      dialogBox.center();
-    }
+      }
   }
 
   /**
