@@ -70,6 +70,7 @@ import org.pentaho.platform.repository2.unified.webservices.RepositoryFileAdapte
 import org.pentaho.platform.repository2.unified.webservices.RepositoryFileDto;
 import org.pentaho.platform.repository2.unified.webservices.RepositoryFileTreeDto;
 import org.pentaho.platform.repository2.unified.webservices.StringKeyStringValueDto;
+import org.pentaho.platform.repository2.unified.webservices.VersionSummaryDto;
 import org.pentaho.platform.scheduler2.quartz.QuartzScheduler;
 import org.pentaho.platform.security.policy.rolebased.actions.AdministerSecurityAction;
 import org.pentaho.platform.security.policy.rolebased.actions.PublishAction;
@@ -90,6 +91,7 @@ import java.io.Serializable;
 import java.net.URLEncoder;
 import java.text.Collator;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -113,9 +115,12 @@ import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
+import javax.ws.rs.core.GenericEntity;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
+import javax.xml.bind.annotation.XmlRootElement;
+import javax.xml.bind.annotation.XmlSeeAlso;
 
 import com.google.gwt.safehtml.shared.SafeHtmlBuilder;
 
@@ -978,6 +983,7 @@ public class FileResource extends AbstractJaxRSResource {
   @Produces( { APPLICATION_XML, APPLICATION_JSON } )
   public List<Setting> doGetPathsAccessList( StringListWrapper pathsWrapper ) {
 
+
     List<Setting> pathsPermissonsSettings = new ArrayList<Setting>();
 
     String permissions =
@@ -1167,7 +1173,7 @@ public class FileResource extends AbstractJaxRSResource {
 
   /**
    * Retrieves the file by creator id
-   * 
+   *
    * @param pathId
    *          (colon separated path for the repository file)
    * @return file properties object <code> RepositoryFileDto </code>
@@ -1190,9 +1196,41 @@ public class FileResource extends AbstractJaxRSResource {
     }
   }
 
+    /**
+     * Retrieves the version history of a selected repository file
+     *
+     * @param pathId
+     *          (colon separated path for the repository file)
+     * @return file properties object <code> RepositoryFileDto </code>
+     */
+    @GET
+    @Path( "{pathId : .+}/versions" )
+    @Produces( { APPLICATION_XML, APPLICATION_JSON } )
+    public Response doGetVersions( @PathParam( "pathId" ) String pathId ) {
+        Serializable fileId = null;
+
+        RepositoryFileDto repositoryFile = getRepoWs().getFile( idToPath( pathId ) );
+        if( repositoryFile != null ){
+            fileId = repositoryFile.getId();
+        }
+        if(fileId != null ) {
+            ArrayList<Object> responseList = new ArrayList<Object>();
+            VersionsResponseList versionsResponseList = new VersionsResponseList();
+            List<VersionSummaryDto> versionSummaryDtos = getRepoWs().getVersionSummaries(fileId.toString());
+            for(VersionSummaryDto dto : versionSummaryDtos ){
+                responseList.add( dto );
+            }
+            versionsResponseList.setList(responseList);
+            return Response.ok(versionsResponseList).build();
+        }
+        else{
+            return Response.serverError().build();
+        }
+    }
+
   /**
    * Retrieve the list of executed contents for a selected content from the repository.
-   * 
+   *
    * @param pathId
    *          (colon separated path for the repository file)
    * @return list of <code> RepositoryFileDto </code>

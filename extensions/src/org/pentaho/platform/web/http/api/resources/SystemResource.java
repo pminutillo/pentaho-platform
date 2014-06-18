@@ -22,15 +22,22 @@ import org.apache.commons.logging.LogFactory;
 import org.codehaus.enunciate.modules.jersey.ExternallyManagedLifecycle;
 import org.pentaho.platform.api.engine.IAuthorizationPolicy;
 import org.pentaho.platform.api.engine.IConfiguration;
+import org.pentaho.platform.api.engine.IPentahoDefinableObjectFactory;
+import org.pentaho.platform.api.engine.IPentahoObjectFactory;
+import org.pentaho.platform.api.engine.IPentahoRegistrableObjectFactory;
 import org.pentaho.platform.api.engine.ISystemConfig;
+import org.pentaho.platform.engine.core.system.PentahoSessionHolder;
 import org.pentaho.platform.engine.core.system.PentahoSystem;
 import org.pentaho.platform.security.policy.rolebased.actions.AdministerSecurityAction;
 import org.pentaho.platform.security.policy.rolebased.actions.RepositoryCreateAction;
 import org.pentaho.platform.security.policy.rolebased.actions.RepositoryReadAction;
 import org.pentaho.platform.web.http.messages.Messages;
 
+import javax.ws.rs.Consumes;
 import javax.ws.rs.GET;
+import javax.ws.rs.POST;
 import javax.ws.rs.Path;
+import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.MediaType;
@@ -138,4 +145,37 @@ public class SystemResource extends AbstractJaxRSResource {
     return policy.isAllowed( RepositoryReadAction.NAME ) && policy.isAllowed( RepositoryCreateAction.NAME )
         && ( policy.isAllowed( AdministerSecurityAction.NAME ) );
   }
+
+    /**
+     * Get versioning enabled flag
+     * @return
+     */
+    @GET
+    @Path("/versioningEnabled")
+    public Response getVersioningEnabled() {
+        return Response.ok(
+                PentahoSystem.get(
+                        Boolean.class,
+                        "versioningEnabled",
+                        PentahoSessionHolder.getSession()
+                ).toString()
+        ).build();
+    }
+
+    /**
+     * Set versioning enabled flag
+     * @param versioningEnabled
+     * @return
+     */
+    @POST
+    @Path("/versioningEnabled")
+    public Response postVersioningEnabled( String versioningEnabled) {
+        IPentahoObjectFactory objectFactory = PentahoSystem.getObjectFactory();
+        if( objectFactory instanceof IPentahoDefinableObjectFactory ) {
+            IPentahoDefinableObjectFactory definableObjectFactory = (IPentahoDefinableObjectFactory) objectFactory;
+            definableObjectFactory.defineInstance( "versioningEnabled", Boolean.parseBoolean(versioningEnabled) );
+        }
+
+        return getVersioningEnabled();
+    }
 }

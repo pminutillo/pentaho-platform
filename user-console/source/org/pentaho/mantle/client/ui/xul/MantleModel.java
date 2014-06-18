@@ -22,6 +22,7 @@ import org.pentaho.mantle.client.MantleApplication;
 import org.pentaho.mantle.client.admin.ContentCleanerPanel;
 import org.pentaho.mantle.client.admin.EmailAdminPanelController;
 import org.pentaho.mantle.client.admin.UserRolesAdminPanelController;
+import org.pentaho.mantle.client.commands.FileHistoryCommand;
 import org.pentaho.mantle.client.commands.FilePropertiesCommand;
 import org.pentaho.mantle.client.commands.NewDropdownCommand;
 import org.pentaho.mantle.client.commands.OpenDocCommand;
@@ -150,6 +151,12 @@ public class MantleModel extends XulEventSourceAdapter implements SolutionBrowse
     FilePropertiesCommand propertiesCommand = new FilePropertiesCommand( selectedFileItem.getRepositoryFile() );
     propertiesCommand.execute();
   }
+
+    @Bindable
+    public void executeHistoryCommand() {
+        FileHistoryCommand historyCommand = new FileHistoryCommand( selectedFileItem.getRepositoryFile() );
+        historyCommand.execute();
+    }
 
   @Bindable
   public void executeSaveCommand() {

@@ -52,6 +52,12 @@ define([
           handler: $.proxy(that.editHandler, that)
         },
         {id: "separator"},
+          {
+              id: "versionsbutton",
+              text: this.i18n.prop('contextAction_versions'),
+              handler: $.proxy(that.versionsHandler, that)
+          },
+        {id: "separator"},
         {
           id: "cutbutton",
           text: this.i18n.prop('contextAction_cut'),
@@ -311,6 +317,10 @@ define([
     cutHandler: function (path, title, id) {
       window.top.executeCommand("CutFilesCommand", this.buildParameter(path, title, id));
     },
+
+      versionsHandler: function(path) {
+          window.top.executeCommand("FileHistoryCommand", this.buildParameter(path));
+      },
 
     copyHandler: function (path, title, id) {
       window.top.executeCommand("CopyFilesCommand", this.buildParameter(path, title, id));

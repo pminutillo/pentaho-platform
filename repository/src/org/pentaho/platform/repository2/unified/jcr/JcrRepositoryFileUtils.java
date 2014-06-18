@@ -94,17 +94,26 @@ public class JcrRepositoryFileUtils {
   private static List<Character> reservedChars = Collections.unmodifiableList( Arrays.asList( new Character[] {
     '/', '\\', '\t', '\r', '\n' } ) );
 
+  private static boolean versioningEnabled = true;
+
   /**
    * Try to get override reserved chars from PentahoSystem,
    * otherwise use default
    */
-  static{
-    List<Character> newOverrideReservedChars = PentahoSystem.get(ArrayList.class,
-      "reservedChars", PentahoSessionHolder.getSession() );
+  static {
+      List<Character> newOverrideReservedChars = PentahoSystem.get(ArrayList.class,
+              "reservedChars", PentahoSessionHolder.getSession());
 
-    if( newOverrideReservedChars != null ){
-      reservedChars = newOverrideReservedChars;
-    }
+      if (newOverrideReservedChars != null) {
+          reservedChars = newOverrideReservedChars;
+      }
+
+      Boolean systemVersioningEnabled = PentahoSystem.get(Boolean.class,
+              "versioningEnabled", PentahoSessionHolder.getSession());
+
+      if (systemVersioningEnabled != null) {
+          versioningEnabled = systemVersioningEnabled;
+      }
   }
 
   private static Pattern makePattern( List<Character> list) {
@@ -837,7 +846,9 @@ public class JcrRepositoryFileUtils {
   public static void checkinNearestVersionableFileIfNecessary( final Session session,
       final PentahoJcrConstants pentahoJcrConstants, final Serializable fileId, final String versionMessage )
     throws RepositoryException {
-    checkinNearestVersionableFileIfNecessary( session, pentahoJcrConstants, fileId, versionMessage, null, false );
+    if( Boolean.TRUE.equals( versioningEnabled ) ) {
+        checkinNearestVersionableFileIfNecessary(session, pentahoJcrConstants, fileId, versionMessage, null, false);
+    }
   }
 
   /**
@@ -849,17 +860,21 @@ public class JcrRepositoryFileUtils {
     // file could be null meaning the caller is using null as the parent folder; that's OK; in this case the node
     // in
     // question would be the repository root node and that is never versioned
-    if ( fileId != null ) {
-      Node node = session.getNodeByIdentifier( fileId.toString() );
-      checkinNearestVersionableNodeIfNecessary( session, pentahoJcrConstants, node, versionMessage, versionDate,
-          aclOnlyChange );
+    if( Boolean.TRUE.equals( versioningEnabled ) ) {
+        if (fileId != null) {
+            Node node = session.getNodeByIdentifier(fileId.toString());
+            checkinNearestVersionableNodeIfNecessary(session, pentahoJcrConstants, node, versionMessage, versionDate,
+                    aclOnlyChange);
+        }
     }
   }
 
   public static void checkinNearestVersionableNodeIfNecessary( final Session session,
       final PentahoJcrConstants pentahoJcrConstants, final Node node, final String versionMessage )
     throws RepositoryException {
-    checkinNearestVersionableNodeIfNecessary( session, pentahoJcrConstants, node, versionMessage, null, false );
+    if( Boolean.TRUE.equals( versioningEnabled ) ) {
+        checkinNearestVersionableNodeIfNecessary(session, pentahoJcrConstants, node, versionMessage, null, false);
+    }
   }
 
   /**
@@ -872,42 +887,45 @@ public class JcrRepositoryFileUtils {
       final boolean aclOnlyChange ) throws RepositoryException {
     Assert.notNull( node );
     session.save();
-    /*
-     * session.save must be called inside the versionable node block and outside to ensure user changes are made
-     * when a file is not versioned.
-     */
-    Node versionableNode = findNearestVersionableNode( session, pentahoJcrConstants, node );
 
-    if ( versionableNode != null ) {
-      versionableNode.setProperty( pentahoJcrConstants.getPHO_VERSIONAUTHOR(), getUsername() );
-      if ( StringUtils.hasText( versionMessage ) ) {
-        versionableNode.setProperty( pentahoJcrConstants.getPHO_VERSIONMESSAGE(), versionMessage );
-      } else {
-        // TODO mlowery why do I need to check for hasProperty here? in JR 1.6, I didn't need to
-        if ( versionableNode.hasProperty( pentahoJcrConstants.getPHO_VERSIONMESSAGE() ) ) {
-          versionableNode.setProperty( pentahoJcrConstants.getPHO_VERSIONMESSAGE(), (String) null );
+    if( Boolean.TRUE.equals( versioningEnabled ) ) {
+        /*
+         * session.save must be called inside the versionable node block and outside to ensure user changes are made
+         * when a file is not versioned.
+         */
+        Node versionableNode = findNearestVersionableNode(session, pentahoJcrConstants, node);
+
+        if (versionableNode != null) {
+            versionableNode.setProperty(pentahoJcrConstants.getPHO_VERSIONAUTHOR(), getUsername());
+            if (StringUtils.hasText(versionMessage)) {
+                versionableNode.setProperty(pentahoJcrConstants.getPHO_VERSIONMESSAGE(), versionMessage);
+            } else {
+                // TODO mlowery why do I need to check for hasProperty here? in JR 1.6, I didn't need to
+                if (versionableNode.hasProperty(pentahoJcrConstants.getPHO_VERSIONMESSAGE())) {
+                    versionableNode.setProperty(pentahoJcrConstants.getPHO_VERSIONMESSAGE(), (String) null);
+                }
+            }
+            if (aclOnlyChange) {
+                versionableNode.setProperty(pentahoJcrConstants.getPHO_ACLONLYCHANGE(), true);
+            } else {
+                // TODO mlowery why do I need to check for hasProperty here? in JR 1.6, I didn't need to
+                if (versionableNode.hasProperty(pentahoJcrConstants.getPHO_ACLONLYCHANGE())) {
+                    versionableNode.getProperty(pentahoJcrConstants.getPHO_ACLONLYCHANGE()).remove();
+                }
+            }
+            session.save(); // required before checkin since we set some properties above
+            Calendar cal = Calendar.getInstance();
+            if (versionDate != null) {
+                cal.setTime(versionDate);
+            } else {
+                cal.setTime(new Date());
+            }
+            ((VersionManagerImpl) session.getWorkspace().getVersionManager()).checkin(versionableNode.getPath(), cal);
+            // Version newVersion = versionableNode.checkin();
+            // if (versionMessageAndLabel.length > 1 && StringUtils.hasText(versionMessageAndLabel[1])) {
+            // newVersion.getContainingHistory().addVersionLabel(newVersion.getName(), versionMessageAndLabel[1], true);
+            // }
         }
-      }
-      if ( aclOnlyChange ) {
-        versionableNode.setProperty( pentahoJcrConstants.getPHO_ACLONLYCHANGE(), true );
-      } else {
-        // TODO mlowery why do I need to check for hasProperty here? in JR 1.6, I didn't need to
-        if ( versionableNode.hasProperty( pentahoJcrConstants.getPHO_ACLONLYCHANGE() ) ) {
-          versionableNode.getProperty( pentahoJcrConstants.getPHO_ACLONLYCHANGE() ).remove();
-        }
-      }
-      session.save(); // required before checkin since we set some properties above
-      Calendar cal = Calendar.getInstance();
-      if ( versionDate != null ) {
-        cal.setTime( versionDate );
-      } else {
-        cal.setTime( new Date() );
-      }
-      ( (VersionManagerImpl) session.getWorkspace().getVersionManager() ).checkin( versionableNode.getPath(), cal );
-      // Version newVersion = versionableNode.checkin();
-      // if (versionMessageAndLabel.length > 1 && StringUtils.hasText(versionMessageAndLabel[1])) {
-      // newVersion.getContainingHistory().addVersionLabel(newVersion.getName(), versionMessageAndLabel[1], true);
-      // }
     }
   }
 
