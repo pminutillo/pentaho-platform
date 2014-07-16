@@ -94,10 +94,11 @@ public class JcrRepositoryFileUtils {
   private static List<Character> reservedChars = Collections.unmodifiableList( Arrays.asList( new Character[] {
     '/', '\\', '\t', '\r', '\n' } ) );
 
-  private static boolean versioningEnabled = true;
+  private static boolean versioningEnabled = false;
+  private static boolean versionCommentsEnabled = false;
 
   /**
-   * Try to get override reserved chars from PentahoSystem,
+   * Try to get parameters from PentahoSystem,
    * otherwise use default
    */
   static {
@@ -113,6 +114,13 @@ public class JcrRepositoryFileUtils {
 
       if (systemVersioningEnabled != null) {
           versioningEnabled = systemVersioningEnabled;
+      }
+
+      Boolean systemVersionCommentsEnabled = PentahoSystem.get(Boolean.class,
+          "versioningEnabled", PentahoSessionHolder.getSession());
+
+      if (systemVersionCommentsEnabled != null) {
+        versionCommentsEnabled = systemVersionCommentsEnabled;
       }
   }
 
@@ -971,7 +979,7 @@ public class JcrRepositoryFileUtils {
   public static RepositoryFile nodeIdToFile( final Session session, final PentahoJcrConstants pentahoJcrConstants,
       final IPathConversionHelper pathConversionHelper, final ILockHelper lockHelper, final Serializable fileId )
     throws RepositoryException {
-    Node fileNode = session.getNodeByIdentifier( fileId.toString() );
+    Node fileNode = session.getNodeByIdentifier( fileId.toString() )at
     return nodeToFile( session, pentahoJcrConstants, pathConversionHelper, lockHelper, fileNode );
   }
 
@@ -1083,6 +1091,22 @@ public class JcrRepositoryFileUtils {
       version = vMgr.getBaseVersion( fileNode.getPath() );
     }
     return toVersionSummary( pentahoJcrConstants, versionHistory, version );
+  }
+
+  /**
+   * Send versioning enabled flag
+   * @return
+   */
+  public static boolean getVersioningEnabled(){
+    return versioningEnabled;
+  }
+
+  /**
+   * Send version comments enabled flag
+   * @return
+   */
+  public static boolean getVersionCommentsEnabled(){
+    return versionCommentsEnabled;
   }
 
   public static RepositoryFileTree getTree( final Session session, final PentahoJcrConstants pentahoJcrConstants,
@@ -1333,8 +1357,8 @@ public class JcrRepositoryFileUtils {
           Messages
             .getInstance()
             .getString(
-              "JcrRepositoryFileDao.USER_0001_VER_COMMENT_ADD_FOLDER", folder.getName(),
-              ( parentFolderId == null ? "root" : parentFolderId.toString() ) ) ); //$NON-NLS-1$ //$NON-NLS-2$
+                "JcrRepositoryFileDao.USER_0001_VER_COMMENT_ADD_FOLDER", folder.getName(),
+                (parentFolderId == null ? "root" : parentFolderId.toString())) ); //$NON-NLS-1$ //$NON-NLS-2$
     return JcrRepositoryFileUtils.getFileById( session, pentahoJcrConstants, pathConversionHelper, null, folderNode
         .getIdentifier() );
   }
