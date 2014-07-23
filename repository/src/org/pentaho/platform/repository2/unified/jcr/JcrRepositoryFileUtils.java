@@ -94,8 +94,9 @@ public class JcrRepositoryFileUtils {
   private static List<Character> reservedChars = Collections.unmodifiableList( Arrays.asList( new Character[] {
     '/', '\\', '\t', '\r', '\n' } ) );
 
-  private static boolean versioningEnabled = false;
-  private static boolean versionCommentsEnabled = false;
+  // versioning and version comments enabled flags default to true
+  private static boolean versioningEnabled = true;
+  private static boolean versionCommentsEnabled = true;
 
   /**
    * Try to get parameters from PentahoSystem,
@@ -979,7 +980,7 @@ public class JcrRepositoryFileUtils {
   public static RepositoryFile nodeIdToFile( final Session session, final PentahoJcrConstants pentahoJcrConstants,
       final IPathConversionHelper pathConversionHelper, final ILockHelper lockHelper, final Serializable fileId )
     throws RepositoryException {
-    Node fileNode = session.getNodeByIdentifier( fileId.toString() )at
+    Node fileNode = session.getNodeByIdentifier( fileId.toString() );
     return nodeToFile( session, pentahoJcrConstants, pathConversionHelper, lockHelper, fileNode );
   }
 
