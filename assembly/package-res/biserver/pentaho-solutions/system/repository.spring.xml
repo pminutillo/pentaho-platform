@@ -948,10 +948,4 @@
   </bean>
   <!-- end authorization policy -->
 
-  <!-- Override reserved chars in JcrRepositoryFileUtils -->
-  <bean class="java.lang.Boolean" id="versioningEnabled">
-    <constructor-arg value="true"/>
-    <pen:publish as-type="INTERFACES"/>
-  </bean>
-
 </beans>

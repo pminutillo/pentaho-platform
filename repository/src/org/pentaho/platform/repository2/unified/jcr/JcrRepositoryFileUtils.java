@@ -18,18 +18,30 @@
 
 package org.pentaho.platform.repository2.unified.jcr;
 
-import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Calendar;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Properties;
-import java.util.regex.Pattern;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.jackrabbit.JcrConstants;
+import org.apache.jackrabbit.core.VersionManagerImpl;
+import org.pentaho.platform.api.engine.IPentahoSession;
+import org.pentaho.platform.api.locale.IPentahoLocale;
+import org.pentaho.platform.api.repository2.unified.IRepositoryAccessVoterManager;
+import org.pentaho.platform.api.repository2.unified.IRepositoryFileData;
+import org.pentaho.platform.api.repository2.unified.RepositoryFile;
+import org.pentaho.platform.api.repository2.unified.RepositoryFileAcl;
+import org.pentaho.platform.api.repository2.unified.RepositoryFilePermission;
+import org.pentaho.platform.api.repository2.unified.RepositoryFileSid;
+import org.pentaho.platform.api.repository2.unified.RepositoryFileTree;
+import org.pentaho.platform.api.repository2.unified.RepositoryRequest;
+import org.pentaho.platform.api.repository2.unified.VersionSummary;
+import org.pentaho.platform.engine.core.system.PentahoSessionHolder;
+import org.pentaho.platform.engine.core.system.PentahoSystem;
+import org.pentaho.platform.repository2.locale.PentahoLocale;
+import org.pentaho.platform.repository2.messages.Messages;
+import org.pentaho.platform.repository2.unified.exception.RepositoryFileDaoMalformedNameException;
+import org.pentaho.platform.repository2.unified.jcr.sejcr.CredentialsStrategySessionFactory;
+import org.pentaho.platform.util.messages.LocaleHelper;
+import org.springframework.util.Assert;
+import org.springframework.util.StringUtils;
 
 import javax.jcr.Item;
 import javax.jcr.ItemNotFoundException;
@@ -45,33 +57,18 @@ import javax.jcr.lock.Lock;
 import javax.jcr.version.Version;
 import javax.jcr.version.VersionHistory;
 import javax.jcr.version.VersionManager;
-
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.jackrabbit.JcrConstants;
-import org.apache.jackrabbit.core.VersionManagerImpl;
-import org.apache.jackrabbit.util.Text;
-import org.pentaho.platform.api.engine.IPentahoSession;
-import org.pentaho.platform.api.locale.IPentahoLocale;
-import org.pentaho.platform.api.repository2.unified.IRepositoryAccessVoterManager;
-import org.pentaho.platform.api.repository2.unified.IRepositoryFileData;
-import org.pentaho.platform.api.repository2.unified.RepositoryFile;
-import org.pentaho.platform.api.repository2.unified.RepositoryFileAcl;
-import org.pentaho.platform.api.repository2.unified.RepositoryFilePermission;
-import org.pentaho.platform.api.repository2.unified.RepositoryFileSid;
-import org.pentaho.platform.api.repository2.unified.RepositoryFileTree;
-import org.pentaho.platform.api.repository2.unified.RepositoryRequest;
-import org.pentaho.platform.api.repository2.unified.VersionSummary;
-import org.pentaho.platform.api.repository2.unified.data.node.DataNode;
-import org.pentaho.platform.engine.core.system.PentahoSessionHolder;
-import org.pentaho.platform.engine.core.system.PentahoSystem;
-import org.pentaho.platform.repository2.locale.PentahoLocale;
-import org.pentaho.platform.repository2.messages.Messages;
-import org.pentaho.platform.repository2.unified.exception.RepositoryFileDaoMalformedNameException;
-import org.pentaho.platform.repository2.unified.jcr.sejcr.CredentialsStrategySessionFactory;
-import org.pentaho.platform.util.messages.LocaleHelper;
-import org.springframework.util.Assert;
-import org.springframework.util.StringUtils;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Properties;
+import java.util.regex.Pattern;
 
 /**
  * Class of static methods where the real JCR work takes place.
@@ -118,7 +115,7 @@ public class JcrRepositoryFileUtils {
       }
 
       Boolean systemVersionCommentsEnabled = PentahoSystem.get(Boolean.class,
-          "versioningEnabled", PentahoSessionHolder.getSession());
+          "versionCommentsEnabled", PentahoSessionHolder.getSession());
 
       if (systemVersionCommentsEnabled != null) {
         versionCommentsEnabled = systemVersionCommentsEnabled;
@@ -671,7 +668,7 @@ public class JcrRepositoryFileUtils {
       final Serializable fileId, final Serializable versionId, final ITransformer<IRepositoryFileData> transformer )
     throws RepositoryException {
     Node fileNode = session.getNodeByIdentifier( fileId.toString() );
-    if ( isVersioned( session, pentahoJcrConstants, fileNode ) ) {
+    if ( ( isVersioned( session, pentahoJcrConstants, fileNode ) ) && ( getVersioningEnabled() == Boolean.TRUE ) ) {
       VersionManager vMgr = session.getWorkspace().getVersionManager();
       Version version = null;
       if ( versionId != null ) {
@@ -855,9 +852,7 @@ public class JcrRepositoryFileUtils {
   public static void checkinNearestVersionableFileIfNecessary( final Session session,
       final PentahoJcrConstants pentahoJcrConstants, final Serializable fileId, final String versionMessage )
     throws RepositoryException {
-    if( Boolean.TRUE.equals( versioningEnabled ) ) {
-        checkinNearestVersionableFileIfNecessary(session, pentahoJcrConstants, fileId, versionMessage, null, false);
-    }
+    checkinNearestVersionableFileIfNecessary(session, pentahoJcrConstants, fileId, versionMessage, null, false);
   }
 
   /**
@@ -869,21 +864,17 @@ public class JcrRepositoryFileUtils {
     // file could be null meaning the caller is using null as the parent folder; that's OK; in this case the node
     // in
     // question would be the repository root node and that is never versioned
-    if( Boolean.TRUE.equals( versioningEnabled ) ) {
-        if (fileId != null) {
-            Node node = session.getNodeByIdentifier(fileId.toString());
-            checkinNearestVersionableNodeIfNecessary(session, pentahoJcrConstants, node, versionMessage, versionDate,
-                    aclOnlyChange);
-        }
+    if (fileId != null) {
+      Node node = session.getNodeByIdentifier(fileId.toString());
+      checkinNearestVersionableNodeIfNecessary(session, pentahoJcrConstants, node, versionMessage, versionDate,
+          aclOnlyChange);
     }
   }
 
   public static void checkinNearestVersionableNodeIfNecessary( final Session session,
       final PentahoJcrConstants pentahoJcrConstants, final Node node, final String versionMessage )
     throws RepositoryException {
-    if( Boolean.TRUE.equals( versioningEnabled ) ) {
-        checkinNearestVersionableNodeIfNecessary(session, pentahoJcrConstants, node, versionMessage, null, false);
-    }
+    checkinNearestVersionableNodeIfNecessary(session, pentahoJcrConstants, node, versionMessage, null, false);
   }
 
   /**
@@ -897,44 +888,45 @@ public class JcrRepositoryFileUtils {
     Assert.notNull( node );
     session.save();
 
-    if( Boolean.TRUE.equals( versioningEnabled ) ) {
-        /*
-         * session.save must be called inside the versionable node block and outside to ensure user changes are made
-         * when a file is not versioned.
-         */
-        Node versionableNode = findNearestVersionableNode(session, pentahoJcrConstants, node);
+    /*
+    * session.save must be called inside the versionable node block and outside to ensure user changes are made
+    * when a file is not versioned.
+    */
+    Node versionableNode = findNearestVersionableNode(session, pentahoJcrConstants, node);
 
-        if (versionableNode != null) {
-            versionableNode.setProperty(pentahoJcrConstants.getPHO_VERSIONAUTHOR(), getUsername());
-            if (StringUtils.hasText(versionMessage)) {
-                versionableNode.setProperty(pentahoJcrConstants.getPHO_VERSIONMESSAGE(), versionMessage);
-            } else {
-                // TODO mlowery why do I need to check for hasProperty here? in JR 1.6, I didn't need to
-                if (versionableNode.hasProperty(pentahoJcrConstants.getPHO_VERSIONMESSAGE())) {
-                    versionableNode.setProperty(pentahoJcrConstants.getPHO_VERSIONMESSAGE(), (String) null);
-                }
-            }
-            if (aclOnlyChange) {
-                versionableNode.setProperty(pentahoJcrConstants.getPHO_ACLONLYCHANGE(), true);
-            } else {
-                // TODO mlowery why do I need to check for hasProperty here? in JR 1.6, I didn't need to
-                if (versionableNode.hasProperty(pentahoJcrConstants.getPHO_ACLONLYCHANGE())) {
-                    versionableNode.getProperty(pentahoJcrConstants.getPHO_ACLONLYCHANGE()).remove();
-                }
-            }
-            session.save(); // required before checkin since we set some properties above
-            Calendar cal = Calendar.getInstance();
-            if (versionDate != null) {
-                cal.setTime(versionDate);
-            } else {
-                cal.setTime(new Date());
-            }
-            ((VersionManagerImpl) session.getWorkspace().getVersionManager()).checkin(versionableNode.getPath(), cal);
-            // Version newVersion = versionableNode.checkin();
-            // if (versionMessageAndLabel.length > 1 && StringUtils.hasText(versionMessageAndLabel[1])) {
-            // newVersion.getContainingHistory().addVersionLabel(newVersion.getName(), versionMessageAndLabel[1], true);
-            // }
+    if (versionableNode != null) {
+      versionableNode.setProperty(pentahoJcrConstants.getPHO_VERSIONAUTHOR(), getUsername());
+      if (StringUtils.hasText(versionMessage)) {
+        versionableNode.setProperty(pentahoJcrConstants.getPHO_VERSIONMESSAGE(), versionMessage);
+      } else {
+        // TODO mlowery why do I need to check for hasProperty here? in JR 1.6, I didn't need to
+        if (versionableNode.hasProperty(pentahoJcrConstants.getPHO_VERSIONMESSAGE())) {
+          versionableNode.setProperty(pentahoJcrConstants.getPHO_VERSIONMESSAGE(), (String) null);
         }
+      }
+      if (aclOnlyChange) {
+        versionableNode.setProperty(pentahoJcrConstants.getPHO_ACLONLYCHANGE(), true);
+      } else {
+        // TODO mlowery why do I need to check for hasProperty here? in JR 1.6, I didn't need to
+        if (versionableNode.hasProperty(pentahoJcrConstants.getPHO_ACLONLYCHANGE())) {
+          versionableNode.getProperty(pentahoJcrConstants.getPHO_ACLONLYCHANGE()).remove();
+        }
+      }
+      session.save(); // required before checkin since we set some properties above
+      // only call checkin() if versioning is enabled
+      if (Boolean.TRUE.equals(versioningEnabled)) {
+        Calendar cal = Calendar.getInstance();
+        if (versionDate != null) {
+          cal.setTime(versionDate);
+        } else {
+          cal.setTime(new Date());
+        }
+        ((VersionManagerImpl) session.getWorkspace().getVersionManager()).checkin(versionableNode.getPath(), cal);
+        // Version newVersion = versionableNode.checkin();
+        // if (versionMessageAndLabel.length > 1 && StringUtils.hasText(versionMessageAndLabel[1])) {
+        // newVersion.getContainingHistory().addVersionLabel(newVersion.getName(), versionMessageAndLabel[1], true);
+        // }
+      }
     }
   }
 
@@ -1010,10 +1002,14 @@ public class JcrRepositoryFileUtils {
 
   private static VersionSummary toVersionSummary( final PentahoJcrConstants pentahoJcrConstants,
       final VersionHistory versionHistory, final Version version ) throws RepositoryException {
+
     List<String> labels = Arrays.asList( versionHistory.getVersionLabels( version ) );
     // get custom Pentaho properties (i.e. author and message)
     Node nodeAtVersion = getNodeAtVersion( pentahoJcrConstants, version );
-    String author = nodeAtVersion.getProperty( pentahoJcrConstants.getPHO_VERSIONAUTHOR() ).getString();
+    String author = "BASE_VERSION";
+    if ( nodeAtVersion.hasProperty( pentahoJcrConstants.getPHO_VERSIONAUTHOR() ) ) {
+      nodeAtVersion.getProperty(pentahoJcrConstants.getPHO_VERSIONAUTHOR()).getString();
+    }
     String message = null;
     if ( nodeAtVersion.hasProperty( pentahoJcrConstants.getPHO_VERSIONMESSAGE() ) ) {
       message = nodeAtVersion.getProperty( pentahoJcrConstants.getPHO_VERSIONMESSAGE() ).getString();
