@@ -18,5 +18,8 @@
 package org.pentaho.commons.util.repository;
 
 public class CreateFolderResponse {
-
+    public String getResponse(){
+        String responseString = "Test!";
+        return responseString;
+    }
 }
